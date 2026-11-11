@@ -1,6 +1,6 @@
 # Open Parking AI — monthly billing
 
-> **Vehicle ID is not in these repositories.** It is Open Parking AI's own vehicle identification service, which recognises a car from its pictures, colour, shape and plate together. Garage owners can use it **free, through an API**: ask for access at [openparking.ai](https://openparking.ai). Once we have confirmed you run a real garage, we send you your key.
+> **Vehicle ID is not in these repositories.** It's Open Parking AI's own vehicle identification service, which recognises a car from its pictures, colour, shape and plate together. Garage owners can use it **free, through an API**. Ask for access at openparking.ai. Once we've confirmed you run a real garage, we send you your key.
 
 **What does this account owe, and when? Is this vehicle covered right now, and
 for how many cars?** Those two questions, and nothing else.
