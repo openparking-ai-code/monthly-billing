@@ -1,0 +1,704 @@
+"""The canonical registry of what this module guarantees.
+
+**ONE SOURCE, THREE CONSUMERS.** ``conftest.py`` requires every registered id to
+have RUN; ``scripts/fail_controls.py`` requires every registered id to have a
+control PROVEN TO FAIL and refuses to run if one has none; ``docs/CONTRACT.md``
+is generated from this file. A guarantee therefore cannot be quietly dropped from
+any of the three, and a number of them cannot go stale in a comment, because
+nothing types the number anywhere.
+
+**A GUARANTEE IS A SENTENCE SOMEBODY COULD ACT ON.** Not "the loader validates
+input" -- that is a description of a mechanism. "Money is an integer of minor
+units at every leaf of an agreement, including leaves this version does not
+read" is a claim with a failing case, and the failing case is what the control
+plants.
+"""
+
+from __future__ import annotations
+
+GUARANTEES: dict[str, str] = {
+    "G1": (
+        "Money is an integer of minor units with an explicit currency. A float, a "
+        "bool or a Decimal is refused at load at EVERY LEAF of an agreement -- "
+        "including leaves this version does not read -- not only at the fields the "
+        "module happens to consult."
+    ),
+    "G2": (
+        "Proration is by the actual days of the period being prorated, and a "
+        "billing period's boundaries are INSTANTS in the garage's own timezone. A "
+        "spring-forward period really is an hour shorter and a fall-back period an "
+        "hour longer, while both still contain a whole number of calendar days."
+    ),
+    "G3": (
+        "A month-end billing day resolves to the last day the month actually has, "
+        "so February is not a special case: the 28th, or the 29th in a leap year."
+    ),
+    "G4": (
+        "The first charge emits the period containing the start date and the "
+        "following one as SEPARATE LINES, never one summed figure. The line count "
+        "does not depend on the start date: an agreement starting ON the billing "
+        "day is charged two full periods, and one starting the day before the next "
+        "billing day is charged one day plus a full period, and both are two lines."
+    ),
+    "G5": (
+        "A price change never alters a period already invoiced. Every invoice line "
+        "records the agreement VERSION that priced it, and that version is what a "
+        "recomputation is checked against."
+    ),
+    "G6": (
+        "The entitlement answer carries NO MONETARY FIELD. Not a fee, not an "
+        "amount, not a balance -- the field set is derived from the answer class "
+        "itself, so a monetary field added tomorrow is caught the day it exists."
+    ),
+    "G7": (
+        "An unpaid invoice past the garage's grace period returns not-covered, and "
+        "NO CONFIGURATION OF THIS MODULE CAN REFUSE AN EXIT. There is no exit call, "
+        "no field on the answer that could deny one, and every not-covered reason "
+        "carries the sentence saying the stay is priced as an ordinary transient."
+    ),
+    "G8": (
+        "An agreement with no mandate record refuses to be CHARGED, by name, before "
+        "any processor is called. Its invoice may still be issued -- a payer who "
+        "pays by cheque has no mandate and is still billed."
+    ),
+    "G9": (
+        "No value shaped like a payment card or a bank account survives into the "
+        "store or into a log line, and NO TRACKED FILE IN THE REPOSITORY CONTAINS "
+        "ONE. The guard scans every column of every row from the record's own "
+        "keys; the repository sweep derives its file set from git and exempts "
+        "nothing, tests and fixtures included."
+    ),
+    "G10": (
+        "An owner's exception records who made it and when, and a NOTE CAN NEVER "
+        "CHANGE AN AMOUNT. The note reaches no arithmetic anywhere in the module; "
+        "the amount is a separate, typed field, and a monetary exception without "
+        "one is refused by name."
+    ),
+    "G11": (
+        "The vehicle list is INDEPENDENT of the spots bought. Twenty vehicles "
+        "against ten spots is a legal agreement, and the module states the "
+        "entitlement rather than counting what is inside."
+    ),
+    "G12": (
+        "Every table this module's migrations create carries ENABLE and FORCE "
+        "row-level security and an isolation policy, and every table but `tenants` "
+        "carries a tenant column -- `tenants` IS the tenant and is isolated by "
+        "`id = current_tenant_id()`. Read from the database catalogue, never from a "
+        "list of table names."
+    ),
+    "G14": (
+        "Every fixture carries its own control asserting it holds the property it "
+        "claims to represent, and those controls run as tests. A DST fixture whose "
+        "zone does not shift, or two identity rules that agree, read as coverage "
+        "while sampling one point on the axis that decides."
+    ),
+    "G15": (
+        "docs/CONTRACT.md is GENERATED from this registry and from the enums and "
+        "refusal codes that implement it, and its prose is derived rather than "
+        "fixed: a value that contradicts a published sentence changes the sentence, "
+        "because generation is not verification."
+    ),
+    "G16": (
+        "Every test module contributes at least one registered guarantee, derived "
+        "from the filesystem and read from the AST -- so a module cannot be added, "
+        "skipped or deleted without a guard noticing. A module that PLANTS a defect "
+        "may not be excused at all."
+    ),
+    "G13": (
+        "A pause covering days in a period that has already been paid is REFUSED by "
+        "name rather than credited or ignored -- and the STORE refuses it: before any "
+        "write, `store_agreement` reads the agreement's paid periods (the periods of its "
+        "invoice lines, by its identity across versions, whose invoice is paid) and "
+        "refuses a version that newly pauses a day inside one, naming the period. A "
+        "pause the newest stored version already held is not newly paused, so a later "
+        "version that keeps it stores; one that extends it is judged on the days it "
+        "adds. This module does not decide refunds; the owner records an exception "
+        "with an amount."
+    ),
+    "G17": (
+        "A billing run is idempotent BY CONSTRAINT: the database holds one invoice "
+        "per tenant, garage, payer and period, so a second run of the same period "
+        "issues nothing, re-prices nothing, and says so per payer rather than "
+        "erroring or duplicating."
+    ),
+    "G18": (
+        "A period is owned by exactly one of the first charge and the billing run, "
+        "decided by PERIOD and never by line count: the run does not re-issue the "
+        "two periods the first charge covered, and it does issue every period after "
+        "them."
+    ),
+    "G19": (
+        "An invoice is paid only by unreversed payments summing to its total, and "
+        "paid_at is DERIVED after each of the three events that can change that -- "
+        "a payment, a reversal, an owner adjustment that moves the total. A "
+        "reversal reopens the invoice from its ORIGINAL due date, never from the "
+        "reversal."
+    ),
+    "G20": (
+        "Payments, reversals and charge attempts are append-only BY GRANT: the "
+        "application role has no UPDATE and no DELETE on them, so money history is "
+        "never edited, only added to -- and the store's instrument guard scans every "
+        "row of theirs on the way in, as it does everywhere. The invoice's own lines "
+        "and the owner's recorded decisions are history the same way -- no UPDATE, no "
+        "DELETE -- and an invoice cannot be deleted; it keeps UPDATE for the one "
+        "derived column, paid_at."
+    ),
+    "G21": (
+        "The store-backed entitlement call returns the pure function's answer and "
+        "nothing else -- the same field set, no money -- with 'unpaid since' derived "
+        "as the earliest unpaid due date, and it HONOURS the owner's grace extensions "
+        "and blocks rather than reading the garage's base figure alone."
+    ),
+    "G22": (
+        "The charge log is the truth for retries, in the order it was RECORDED: the "
+        "retry state is rebuilt from the persisted OUTCOME rows walked by the sequence "
+        "the database assigned under the invoice lock -- never by the instant a caller "
+        "typed -- and an outcome counts toward the payment method that was current "
+        "when its RESERVATION was made. Three recorded non-success outcomes refuse the "
+        "fourth by name; a recorded method change allows it -- and is allowed while an "
+        "attempt is pending, because it moves no money; a success counts toward nothing "
+        "and resets nothing; an unknown counts as nothing; and a restart forgets nothing "
+        "because nothing lives outside the rows."
+    ),
+    "G23": (
+        "A charge is for the BALANCE -- the invoice's total minus its unreversed "
+        "payments, read under the invoice lock through the same derivation that "
+        "decides paid -- never the total; and a balance of nothing is refused by name "
+        "BEFORE the processor is called and before any row is written, so a paid "
+        "invoice is never charged again, a part-paid one is charged its remainder, "
+        "and a fully waived one is not charged at all. A payment that lands between "
+        "the reservation and the outcome does not cancel the card payment the "
+        "processor made: it is recorded for the amount reserved and the invoice reads "
+        "OVERPAID, never silently."
+    ),
+    "G24": (
+        "Every call to the processor is PRECEDED by its row -- the reservation for the "
+        "first ask, an `ask` row for every re-ask, each written and committed before the "
+        "processor is asked, so a call the processor received always has a row on our "
+        "side -- and FOLLOWED by a row recorded as it came: what the processor said as an "
+        "`outcome` row -- or, when the operator resolved the attempt while that ask was "
+        "at the processor, as a `late` row beside the operator's resolution, carrying what "
+        "the processor said, never dropped -- and what the module did not receive -- a "
+        "raise, before or after the request left, or a return the instrument guard "
+        "refused -- as an `unknown` row saying what the module saw, never as an outcome. "
+        "A row is never lost to its own message."
+    ),
+    "G25": (
+        "An owner's exception is read by the agreement's IDENTITY across every version "
+        "of it: a block or a grace extension recorded against one version still "
+        "reaches the barrier after a price change has stored the next."
+    ),
+    "G26": (
+        "An owner exception's amount is a POSITIVE number of minor units, refused by "
+        "name by the module and by CHECK in the database, so no kind can be turned "
+        "into its opposite by a sign -- and a refund records the decision and its "
+        "amount and moves NO total: a paid period is paid."
+    ),
+    "G27": (
+        "ALREADY_ISSUED means exactly that a row for this garage, payer and period "
+        "exists: a unique violation on any other constraint is reported as its own "
+        "outcome, naming the constraint, and makes the run exit non-zero -- the run "
+        "never says a period was invoiced when it was not."
+    ),
+    "G28": (
+        "Every money-history row points into its OWN tenant by composite key -- a "
+        "payment at its invoice, a reversal at its payment, an attempt at its invoice "
+        "-- so a row cannot reference another tenant's even by a raw INSERT that the "
+        "policy would let past, because a foreign-key check runs past row-level "
+        "security and the key does not."
+    ),
+    "G29": (
+        "A payment is reversed at most once, for a reason that fits its method, and "
+        "card fields sit only on a card payment -- each refused BY NAME by the module "
+        "before the database has to, so an operator is never handed a raw driver "
+        "error for a state the module can name. Two reversals of one payment AT ONCE "
+        "are one recorded and one refused by name: the check runs under the invoice "
+        "lock, and the one-reversal-per-payment constraint is caught by its name as "
+        "the backstop."
+    ),
+    "G30": (
+        "Every event that changes an invoice's money -- a payment, a reversal, an "
+        "owner's adjustment, both halves of a charge, the resolution of a pending "
+        "attempt -- runs inside a transaction that first takes the invoice's row "
+        "lock, so two events on one invoice at once are serialised and the second "
+        "derives paid_at from the first's COMMITTED rows. Which events take the lock "
+        "is read from the source by the contract, never typed -- and the control that "
+        "proves the serialisation removes the lock itself, not one caller's."
+    ),
+    "G31": (
+        "A charge is a PERSISTED RESERVATION, then the processor, then an OUTCOME "
+        "with its payment: the attempt row is committed BEFORE the processor is "
+        "called, and the outcome row and the card payment land in ONE transaction. "
+        "What the module does not know is never written as an outcome: an answer that "
+        "did not arrive -- a raise, or a return the instrument guard refused -- is an "
+        "`unknown` row and the attempt stays PENDING. A pending attempt is never "
+        "charged past: while its request may be in flight the next charge is refused "
+        "by name, naming the attempt id, and `pending-attempts` lists it; when the "
+        "module has said it does not know, the next charge asks the processor again "
+        "under the SAME idempotency key for the amount RESERVED, with no cap on "
+        "re-asks -- one key is one charge at most. An operator records what the "
+        "processor said once (`resolve-attempt`): a second resolution is refused by name, "
+        "from the check under the lock and from the one-outcome-per-attempt index "
+        "caught by its name. The processor's own answer to an ask that was at the "
+        "processor when the operator resolved is not a second resolution: it is a `late` "
+        "row, and the processor's word on money outranks the operator's typed one -- a "
+        "late SUCCESS the operator did not record writes the card payment for the amount "
+        "RESERVED in the same transaction, so the invoice is paid and no fresh key is "
+        "minted; a late SUCCESS on a recorded success writes no second payment; a late "
+        "decline or error is the row only, and the operator's SUCCESS and its payment "
+        "stand for the operator's reversal."
+    ),
+    "G32": (
+        "ONE CAR, ONE AGREEMENT PER GARAGE. A vehicle identity is registered to one "
+        "agreement at a garage; a second agreement listing it is refused by name, "
+        "naming the holder and, if the holder is cancelled, the day it frees the "
+        "vehicle -- on which day the registration passes to the new agreement. A "
+        "REFUSAL WRITES NOTHING: every listed identity is checked before the release "
+        "and before any row changes, so the caller's transaction is as it was. The "
+        "database's UNIQUE is the backstop for a raw insert and for two registrations "
+        "racing. The coverage call picks nothing: handed two agreement identities for "
+        "one vehicle, it refuses by name."
+    ),
+    "G33": (
+        "An invoice total never goes below zero: an owner's adjustment may take the "
+        "invoice's PRE-TAX total -- the sum of its non-tax lines -- to zero and no "
+        "further, and one that would go past it is refused by name, computed under "
+        "the invoice lock from the committed lines; exactly zero is a fully waived "
+        "invoice and is allowed, and the tax follows the base down to nothing. On a "
+        "taxed invoice a credit above the pre-tax total and below the taxed one is "
+        "refused by the same name. There is no database backstop for a floor across "
+        "rows -- the lock is the whole guard, and the contract says so."
+    ),
+    "G34": (
+        "A block the owner records against an INVOICE is lifted by an unblock the "
+        "owner records, never by a payment: invoice-attached blocks and unblocks are "
+        "read whatever the invoice's paid state, and a grace extension on an invoice "
+        "is read only while that invoice is unpaid."
+    ),
+    "G35": (
+        "Overpayment is a RECORDED FACT and never acted on: the paid state carries "
+        "by how much the unreversed payments exceed the total, the command line prints "
+        "it, and no cap is put on what an operator records -- a cheque is what it is; "
+        "a refund is the owner's exception and the money's return is collection's."
+    ),
+    "G36": (
+        "The store-backed coverage call answers the AGREEMENT axes at the instant "
+        "asked and the PAYMENT state as of now, and the command line SAYS SO whenever "
+        "the instant asked is in the past -- one line, present for a past instant "
+        "and absent otherwise."
+    ),
+    "G37": (
+        "Every garage reference is half of a COMPOSITE TENANT KEY: every column named "
+        "garage_id in the schema carries a foreign key (tenant_id, garage_id) at "
+        "garages (tenant_id, id), so a row cannot name another tenant's garage even by "
+        "a raw INSERT that the policy would let past -- a foreign-key check runs past "
+        "row-level security and the key does not. Read from the catalogue, never from "
+        "a list of table names."
+    ),
+    "G38": (
+        "No exception leaves the invoice lock held: every money event takes the lock "
+        "through ONE context manager that rolls the transaction back on any raise -- a "
+        "refusal, the instrument guard, a driver error -- so the caller's connection is "
+        "idle and unlocked when the exception reaches it, and a money event on another "
+        "connection is recorded at once. The lock is taken in exactly one place, read "
+        "from the source."
+    ),
+    "G39": (
+        "An agreement is billed at ONE HOME GARAGE and COVERS the garages the owner "
+        "lists, the home among them -- stated by listing, never by an 'everywhere' flag "
+        "or a default, and a document that omits the set is refused by name. The "
+        "coverage door is MEMBERSHIP of that set; the asking garage still compares the "
+        "plate under its own rule. The unpaid-invoice read, the owner's exceptions and "
+        "the grace period -- days AND clock -- follow the agreement's HOME, never the "
+        "asking garage, and two agreements of one payer homed at two garages are judged "
+        "independently. Registrations fan out one row per covered garage, each under "
+        "that garage's own identity rule, all or none: a collision at ANY covered "
+        "garage refuses the whole registration by name and writes nothing. The "
+        "entitlement is across the covered set, not per garage. THE HOME NEVER MOVES: "
+        "a version billed at a different garage from the versions already stored is "
+        "refused by name and writes nothing, because a move has no stated answer for "
+        "the month already invoiced, for an unpaid invoice or a block at the old home, "
+        "or for whose billing day governs next -- so the home-keyed reads are correct "
+        "for every state the module can store. There is no cross-row database backstop "
+        "for this; a row written past the module with another home is read at that "
+        "home only."
+    ),
+    "G40": (
+        "MONEY IS NOT MULTI-GARAGE. The billing day, the currency, the timezone of the "
+        "period boundaries, proration, the invoice, the run and the charge are keyed on "
+        "the agreement's HOME garage only: a run at a garage the agreement merely covers "
+        "issues nothing for it, the first charge and the period invoice refuse another "
+        "garage by name whether or not the agreement covers it, and the store refuses "
+        "to file an agreement under a garage that is not its home. The billing run reads "
+        "the agreements BILLED at a garage through a loader that never widens to the "
+        "covered set and that chooses each agreement's LATEST version before it asks "
+        "where that version is homed; the coverage call reads a second loader. A "
+        "version that would MOVE the home is refused by name and never stored, so the "
+        "ordering matters only for a row written past the module -- and for that row "
+        "the run bills the newest version's home only. The charge reads the agreements "
+        "the invoice's own lines name, each at its latest version, and the garage does "
+        "not enter that read: an invoice whose agreement's newest row was written past "
+        "the module at another home is still charged, and an invoice naming no "
+        "loadable agreement is refused by name."
+    ),
+    "G41": (
+        "Migration 0004 gives every EXISTING agreement version a covered set of exactly "
+        "its home garage, read from agreements.garage_id, and asserts the placed rows "
+        "against the pre-migration count rather than a literal. A version whose home "
+        "cannot be placed fails the migration BY NAME -- external id and version -- "
+        "before a row is written, and the whole migration rolls back."
+    ),
+    "G42": (
+        "ONE AGREEMENT, ONE REGISTRAR. An agreement STATES who writes its "
+        "registrations -- this module, the default, or an OUTSIDE registrar -- on "
+        "its document and on its row, never inferred. For an outside registrar's "
+        "agreement the module writes NO registration of its own: storing a version "
+        "registers nothing and releases nothing by identity -- only the rows at a "
+        "garage that version no longer covers are released, as for any agreement -- "
+        "the document lists no vehicles "
+        "(a list it does not own is refused by name) and loads back that way, and "
+        "the outside registrar registers and releases ONE vehicle identity at a "
+        "time through the registration door -- which fans out over the covered set "
+        "under each garage's own rule (a release may instead name ONE covered "
+        "garage and reach it alone, G46), refuses at every covered garage before it "
+        "writes anywhere, takes over a cancelled holder's row on its day, and "
+        "answers with the identity as stored per garage. Both halves of the door "
+        "refuse by name an agreement whose registrations this module writes. The "
+        "door writes the garage's holder claim (vehicle_registrations), never a "
+        "version's own list (agreement_vehicles)."
+    ),
+    "G43": (
+        "Migration 0005 gives every EXISTING agreement version the registrar it "
+        "has today -- this module -- and asserts the stated rows against the "
+        "pre-migration count rather than a literal: a default that left any "
+        "version stating otherwise fails the migration and the whole file rolls "
+        "back. No version is left unstated. The file refuses BY NAME, before its "
+        "BEGIN, a role that cannot see every row of a FORCE-RLS table -- neither "
+        "superuser nor BYPASSRLS -- because under such a role its count check "
+        "compares zero with zero and a flipped default applies with nothing done. "
+        "And it carries 0004's repair forward: 0004 does not check who is reading, "
+        "and run as such a role it places no covered-set row for any version that "
+        "existed; 0005 inserts the missing home row for every version that lacks "
+        "one and nothing else -- zero rows where 0004 saw every row, the same zero "
+        "on a second run -- and neither audits 0004 nor refuses on finding rows "
+        "missing, because its guard already refuses the only role that leaves them."
+    ),
+    "G44": (
+        "THE BARRIER READS THE AGREEMENT'S REGISTER, AND WHO KEEPS IT IS STATED. "
+        "Which vehicle identities belong to an agreement at a garage is decided in "
+        "ONE place for both coverage doors: the version's own vehicle list under "
+        "this module -- the answer it always gave, field for field -- and the "
+        "store's registration rows under an OUTSIDE registrar, which the store-backed "
+        "door supplies to the pure call as a STATED parameter, empty or not. The pure "
+        "call refuses by name an outside registrar's agreement handed in without "
+        "them, never answering 'no agreement' for a car it could not look up; a car "
+        "with no row is not covered; the money state at the home reaches a "
+        "door-registered car at every door it covers; and the money doors read none "
+        "of this."
+    ),
+    "G45": (
+        "THE REGISTER CAN BE READ, BY ANY READER. `show-register` -- and "
+        "`show_register` beneath it, the same code, exported beside the door -- "
+        "answers for an agreement of EITHER registrar and says which, from its "
+        "LATEST version, chosen by the one helper the registration door chooses its "
+        "own with: the agreement id, the version, the registrar, the status, the "
+        "cancellation day, the home garage, the covered garages, every registration "
+        "row naming the agreement at ANY garage as the garage and the identity AS "
+        "STORED there, and the garages of rows the latest version does not cover. "
+        "Nine keys, derived from the answer class, and nothing more travels: no "
+        "price, payer, spots, fee, pause, mandate, access hours, start day, version "
+        "vehicle list, registration instant, invoice or payment. It takes no instant "
+        "and derives nothing; it validates nothing it does not return -- every field "
+        "is a column's own value under that column's constraint, no Agreement and no "
+        "Garage is built -- so a garage stored with an unreadable option or a version "
+        "the loaders refuse still shows its register in full; it writes nothing; "
+        "another tenant's agreement of the same id is not shown, with the row policy "
+        "on or off; every list is sorted in Python by code point, never by the "
+        "database's collation; an agreement the store does not hold is NOT FOUND "
+        "(stderr, exit 2) and one with no rows answers an empty register. JSON with "
+        "sorted keys on stdout, exit 0, nothing on stderr."
+    ),
+    "G46": (
+        "A RELEASE CAN NAME ONE COVERED GARAGE AND REACH IT ALONE. `release-vehicle "
+        "--garage G` -- and the same optional parameter on `release_from_outside`, "
+        "the same code -- normalises the identity under THAT garage's rule, deletes "
+        "that garage's row of this agreement and no other row anywhere, and answers "
+        "the same header and exactly one `at garage G: form` line. Without the option "
+        "an UNAMBIGUOUS release is what it was, byte for byte: output, exit code, rows "
+        "-- the one state carved out is the ambiguous text, which the unnamed form "
+        "refuses by name (G47). With it "
+        "the refusals come by name, in this order, every one before any write: no "
+        "such agreement (NOT FOUND); a registrar that is this module "
+        "(REFUSAL_REGISTRAR_IS_THIS_MODULE); a garage the tenant does not hold (NOT "
+        "FOUND -- found by tenant AND id in this path's own lookup, so another "
+        "tenant's garage of the same id is not found with the row policy on or off); "
+        "a garage the agreement's LATEST version does not cover "
+        "(REFUSAL_GARAGE_NOT_COVERED -- a row left at a garage a version dropped is "
+        "not reachable this way, the version that dropped it released it); no row of "
+        "this agreement for this identity at that garage "
+        "(REFUSAL_VEHICLE_NOT_REGISTERED). A refusal writes nothing. It is for any "
+        "registrar: two covered garages that disagree on the identity rule can hold, "
+        "under one text, a stale row at the exact-rule garage and the live car's row "
+        "at the folded one, and the fan-out cannot take the one without the other -- "
+        "so the stale row is released by naming its garage, the live row stays, and "
+        "the car is covered at both garages throughout. No register change, no "
+        "migration, no grant; the money doors and the reads are untouched."
+    ),
+    "G47": (
+        "AN AMBIGUOUS RELEASE NAMES ITS GARAGE. The unnamed release (`release-vehicle` "
+        "without `--garage`, `release_from_outside` without `garage_id`) refuses by "
+        "name (REFUSAL_RELEASE_AMBIGUOUS_ACROSS_GARAGES) when, at a covered garage it "
+        "would delete at, the row it would take is also the fold of a DIFFERENT "
+        "identity this agreement holds as its own row at another covered garage -- "
+        "the register holds two identities that are one row at one garage and two "
+        "at another, so the text names no single row across the covered set, and "
+        "taking it would remove coverage for a registration the release did not "
+        "name. The refusal comes after no-such-agreement and the registrar check and "
+        "before REFUSAL_VEHICLE_NOT_REGISTERED, every one before any write; it "
+        "writes nothing, and its detail names the identity as given, the garage "
+        "whose row is shared and the form there, and the other identity with the "
+        "garage it is stored at. It cannot fire for an agreement covering one "
+        "garage -- the rule pairs two DIFFERENT covered garages, so a one-garage "
+        "agreement never reaches it whatever its rows hold; it does not fire for a "
+        "covered garage that holds no row of the agreement (G42), nor for another "
+        "agreement's identity at a covered garage -- only this agreement's rows "
+        "count; and a stored form that normalises to nothing under the other "
+        "garage's rule is the fold of nothing. The named form (G46) is untouched in "
+        "every state and is the way through. An unnamed release that is not "
+        "ambiguous is what it was, byte for byte: output, exit code, rows. No "
+        "migration, no grant; the money doors, the reads and `show-register` are "
+        "untouched."
+    ),
+    "G48": (
+        "THE REGISTER CAN BE READ BY GARAGE, BY ANY READER, WITHOUT AN AGREEMENT ID. "
+        "`show-garage-register` -- and `show_garage_register` beneath it, the same code -- "
+        "answers for a garage the tenant holds: every vehicle_registrations row at that "
+        "garage, selected by the garage and the tenant alone and never through an "
+        "agreement's covered set, as the identity stored there and the agreement it "
+        "names; for every agreement those rows name, from its LATEST version -- chosen by "
+        "the one helper the registration door and show-register choose theirs with -- the "
+        "agreement id, the version, the registrar, the status and the cancellation day, "
+        "and the days coverage is decided by (G63); "
+        "the agreements whose latest version does not cover the garage; and the ids the "
+        "rows name that the tenant holds no version of, each named and never a refusal of "
+        "the whole read, because agreement_external_id is text keyed to nothing and a row "
+        "a system past the module left is the row a reconciliation exists to find. Five "
+        "keys, derived from the answer class, and nothing more travels: no price, payer, "
+        "spots, fee, mandate, access hours, home garage, covered set, version vehicle "
+        "list, registration instant, invoice, amount or payment. It answers for either "
+        "registrar and says which. It takes no instant and derives nothing but G63's "
+        "days; it "
+        "validates nothing it does not return -- no Agreement and no Garage is built -- so "
+        "a garage stored with an unreadable option or a version the loaders refuse still "
+        "shows its register in full; it writes nothing, proven by row counts and digests "
+        "of every table and by the backend's own tuple counters; another tenant's garage "
+        "of the same id is not read, with the row policy on or off, held by the read's "
+        "own tenant predicate on the garage, on the rows, and on the owner's exceptions "
+        "G63's days are read from -- another tenant's block or grace extension on an "
+        "agreement of the same id never reaches them; every list is sorted in "
+        "Python by code point, never by the database's collation; a garage the store "
+        "does not hold is NOT FOUND (stderr, exit 2) and one with no rows answers an "
+        "empty register. JSON with sorted keys on stdout, exit 0, nothing on stderr. "
+        "show-register (G45) is untouched: this is the read for the reader that was "
+        "never told an agreement id, and it exists because asking covered-in-store once "
+        "per known vehicle is a cost that grows with every car ever seen."
+    ),
+    "G49": (
+        "AT ISSUE, TAX IS APPENDED AFTER EVERY PRICED LINE, BY ONE PRODUCER. "
+        "`first_charge` and `invoice_for_period` price periods and return untaxed "
+        "invoices; `tax_an_invoice` takes a complete untaxed invoice and appends the "
+        "engine's lines after every period, fee and adjustment line, one per rule in "
+        "the garage's stated `sequence`, each naming its rule and no agreement. An "
+        "invoice that already carries tax lines is refused a second taxing by name "
+        "(`REFUSAL_INVOICE_ALREADY_TAXED`)."
+    ),
+    "G50": (
+        "AN INVOICE'S `subtotal_minor` IS THE SUM OF THE NON-TAX LINES IT WAS ISSUED "
+        "WITH, AND THE DATABASE HOLDS IT. Migration 0006 checks it at commit against "
+        "the non-tax lines written in the issuing transaction and refuses a row that "
+        "disagrees, by name. `subtotal_minor`, `tax_set_effective_from` and "
+        "`tax_sets_seen` are all present or all absent -- absent only on an invoice "
+        "issued before 0006, untaxed, and never backfilled with a guess. A later "
+        "adjustment moves the invoice's current pre-tax total, derived from its lines, "
+        "and never the recorded issue-time figure. `subtotal + tax = total` is not a "
+        "constraint: the total is derived from the lines, so it would prove nothing."
+    ),
+    "G51": (
+        "NO TAX SET IN FORCE AT THE INVOICE'S `due_at` IS A REFUSAL, NEVER A ZERO. A "
+        "garage that has stated no tax position, or whose every set takes effect after "
+        "`due_at`, gets no invoice: each payer's run line is REFUSED with "
+        "`REFUSAL_NO_TAX_SET_IN_FORCE` carrying the engine's own sentence, the payers "
+        "after it are still processed, nothing is written for it, and the run reports "
+        "refused (the command exits non-zero). Stating nothing is not stating none."
+    ),
+    "G52": (
+        "A SET WITH NO RULES IS HOW A GARAGE STATES IT CHARGES NONE, AND IT YIELDS NO "
+        "TAX LINE. The invoice is issued, carries no tax line, records that set and "
+        "a subtotal equal to its total. A zero subtotal under a set with rules also "
+        "yields no tax line: the engine returns none and this module invents none."
+    ),
+    "G53": (
+        "AN ISSUED INVOICE IS NEVER RE-PRICED AGAINST ANOTHER TAX SET. A set stated "
+        "after issue -- later, or backdated to before `due_at` -- changes nothing on "
+        "it: a re-run is ALREADY_ISSUED and its tax lines and tax position are as "
+        "issued, and an adjustment on it re-taxes at the set it RECORDED, never the "
+        "set in force today. The three tax-position columns are immutable: an UPDATE "
+        "to any of them is refused by the database, naming the column, while the "
+        "derived `paid_at` stays writable."
+    ),
+    "G54": (
+        "THE FIRST CHARGE'S TWO PERIODS TAKE ONE TAX MOMENT -- A FUNCTION-LEVEL "
+        "GUARANTEE, because the first charge is computed from documents and stored "
+        "nowhere. `first-charge --tax-sets` taxes the invoice once, through the engine, "
+        "at `first_charge_due_at`: the start instant of the FIRST period it pays for. "
+        "A set taking effect between its two periods prices neither. Without "
+        "`--tax-sets` the output says, on its own lines, that the figure is UNTAXED."
+    ),
+    "G55": (
+        "THIS MODULE COMPUTES NO PERCENTAGE: `rate-engine` IS THE ONLY TAX ARITHMETIC. "
+        "Every tax amount on an invoice is the engine's answer, mapped and never "
+        "recomputed; `tax.py`, the one file that imports the engine, contains no "
+        "multiplication, division, modulo or power; no other source file imports it. "
+        "The engine is the `tax` extra, imported lazily: the entitlement answer, the "
+        "invoice arithmetic and the store import no part of it, and tax asked for "
+        "without it is refused by name (`REFUSAL_TAX_NEEDS_THE_ENGINE`)."
+    ),
+    "G56": (
+        "TAX IS THE LAST COMPUTATION ON AN INVOICE, NOT THE LAST ROW. After every "
+        "owner's adjustment on a taxed invoice, each rule's tax lines sum to the "
+        "engine's tax for that rule on the invoice's non-tax total at the set the "
+        "invoice recorded: the one writer of adjustments appends the adjustment and, "
+        "in the same transaction, one compensating tax line per rule naming the "
+        "exception (negative where the base fell, zero where the rounded figure did "
+        "not move). A waiver to zero leaves no tax. The adjustment's agreement is "
+        "copied from a non-tax line, the first by `created_at` then `id`; that filter "
+        "is defence in depth, and what makes a money line carrying a tax line's null "
+        "agreement impossible is the database's `invoice_lines_tax_names_no_agreement`. "
+        "The database refuses at commit an adjustment on an invoice whose set has "
+        "rules that arrives with NO tax line naming its exception; it counts no "
+        "rules, so one line per rule is proven by this guarantee's tests alone, and "
+        "that the line is the RIGHT amount needs the percentage, so that is this "
+        "guarantee's test and not a constraint either."
+    ),
+    "G57": (
+        "A GARAGE'S TAX SETS COME IN THROUGH ONE DOOR, AND THE ENGINE IS ITS ONLY "
+        "JUDGE. `state_tax_sets` (and `state-tax-sets`) hands the document to "
+        "`rate-engine`'s `load_tax_sets` before reading a field, refuses what it "
+        "refuses in its words (`REFUSAL_TAX_SETS_INVALID`) and stores nothing; stores "
+        "what it accepted as the engine read it; and before the caller commits reads "
+        "the garage's WHOLE list back and loads it again, refusing a statement after "
+        "which the list would not load. A set at an instant the garage already has is "
+        "refused by name. The table is append-only by grant, and a card-shaped value "
+        "inside a rule is refused at the store like any other column's."
+    ),
+    "G58": (
+        "AN AGREEMENT'S PAYER NEVER CHANGES BETWEEN VERSIONS. A version naming a "
+        "different payer from the versions the store already holds is refused by name "
+        "(`REFUSAL_PAYER_CHANGED`) before anything is written, as a home move and a "
+        "registrar change are: the invoice, its one-per-period lock, the unpaid check "
+        "at the barrier and the charge's mandate are all the payer's, so a stored "
+        "change invoiced a period already invoiced a second time to the new payer, "
+        "stopped counting the old payer's unpaid invoice, and charged the old payer's "
+        "invoice under the new payer's mandate. A different payer is a different "
+        "agreement. There is no cross-row database backstop for this."
+    ),
+    "G59": (
+        "A VERSION IS STORED ONLY IF IT IS NEWER THAN EVERY VERSION THE STORE HOLDS. "
+        "A version whose number is not above the newest stored one -- a late save of "
+        "an older version, or a retry of the same one -- is refused by name "
+        "(`REFUSAL_VERSION_NOT_NEWER`) before anything is written, so the garage's "
+        "registered cars are never rewritten to an older list while the newest version "
+        "still names them. The first version of an agreement is any number. Two saves "
+        "of one agreement at the same moment are put in order: each takes a "
+        "transaction-scoped lock on the agreement's identity in its tenant before it "
+        "reads the newest version, so the second waits until the first's transaction "
+        "ends and is then judged against what the first stored -- a v4 saved while a "
+        "v6 is being stored is refused once v6 commits. That is under READ COMMITTED, "
+        "the driver's default and what the test measures; at a stricter isolation "
+        "level the save's reads come from its transaction's snapshot, which the lock "
+        "does not refresh. The "
+        "UNIQUE on (tenant, agreement, version) still catches two rows of one number, "
+        "however they were written."
+    ),
+    "G60": (
+        "A RECURRING FEE IS PRORATED FROM ITS OWN START. On the first charge and on "
+        "every period the run issues, a recurring fee whose `effective_from` falls "
+        "inside the period is billed for the agreement's billable days from that day "
+        "on -- the later of its start and the period's first day -- over the period's "
+        "days, exactly as the monthly price is prorated, and its line says 'part "
+        "month'; a fee in force for the whole period is unchanged. A fee starting on "
+        "or after the period's end is still not on it."
+    ),
+    "G61": (
+        "ACCESS HOURS ARE JUDGED ON DATED TIMES. At the exit a stay is inside its "
+        "agreement's hours only when it entered at or after `entry_from` and left no "
+        "later than `exit_by` on the ENTRY's own local day -- or on the day after it, "
+        "when `exit_by` is earlier than `entry_from` and the hours run past midnight. "
+        "So a day agreement (07:00 to 18:00) does not cover an overnight or a multi-day "
+        "stay, and a night agreement (18:00 to 08:00) covers a stay that enters in the "
+        "evening and leaves by the next morning. Compared as wall-clock readings of the "
+        "asking garage's clock, as the rate engine's bounded day span is. At entry, "
+        "with no exit known, the entry half alone is judged and the exit half is named "
+        "in `unchecked`, as before."
+    ),
+    "G62": (
+        "THE FOLDED IDENTITY RULE READS O AS 0 AND I AS 1. `folded_alphanumeric` "
+        "case-folds, removes every character that is not a letter or a digit, and "
+        "then reads the letter O as the digit 0 and the letter I as the digit 1 -- on "
+        "the identity written down and on the one presented alike -- because the plate "
+        "reader's alphabet has neither letter, so a plate registered as GO4IT is read "
+        "G041T and must match it. No other letter is folded, and `exact` is "
+        "untouched. Migration 0007 re-keys every identity already stored in the "
+        "folded form -- a registration under its own garage's rule, a version's list "
+        "under its home's -- refuses by name, before any row changes, two stored forms "
+        "that the fold would make one, refuses a role that cannot see every row, and "
+        "fails if any folded form still holds an o or an i."
+    ),
+    "G63": (
+        "THE GARAGE REGISTER CARRIES THE DAYS THE MODULE DECIDES COVERAGE BY. Every "
+        "agreement `show-garage-register` names carries, beside its status and "
+        "cancellation day, its latest version's `start_day` and `pauses` (half-open, as "
+        "stored), the owner's `blocked`, and `not_covered_from`: the first day of the "
+        "HOME garage's calendar on which the payer's earliest unpaid invoice at the "
+        "home is past grace, the owner's extensions counted, or null when nothing is "
+        "unpaid -- read through the same exceptions read and the same earliest-unpaid "
+        "rule `covered-in-store` uses, given the register's tenant as a predicate of its "
+        "own (G48), with the payment state as of now. Dates and a "
+        "flag only: no amount, invoice, payer or grace figure travels. A reader that "
+        "judges a garage-local day by them answers what `covered-in-store` answers on "
+        "every axis but access hours, which the register does not carry; "
+        "`not_covered_from` stays a day of the home's calendar, the clock grace is "
+        "judged on (G39), so at a covered garage in another zone it turns over at the "
+        "home's midnight. The fields are additive: a reader that does not know them "
+        "reads the register as before."
+    ),
+    "G64": (
+        "AN INVOICE THAT OWES NOTHING IS PAID FROM ITS ISSUE. The billing run derives "
+        "`paid_at` in the transaction that writes the invoice, by G19's rule -- paid "
+        "when unreversed payments reach the total -- so an invoice whose total is zero "
+        "(an agreement priced at zero, or a zero subtotal, which yields no tax line) is "
+        "paid at its issue instant, and no car reads UNPAID_PAST_GRACE for it while it "
+        "owes nothing. Any other total is unpaid at issue: the derivation writes nothing, and "
+        "the issue marks nothing paid that a payment has not paid."
+    ),
+    "G65": (
+        "THE INSTRUMENT GUARD REFUSES ONE PAYER'S INVOICE, NEVER THE RUN. An invoice "
+        "row the store's guard refuses -- as it refuses every reference at a garage "
+        "whose id ends in nine digits that pass the routing checksum -- is that "
+        "payer's REFUSED line, naming the column and the shape and never the digits; "
+        "nothing is written for that payer, the payers after it are still processed, and "
+        "the command prints the report and exits 1. The guard is not loosened for a "
+        "reference, and the garage is stored as any garage is."
+    ),
+}
+
+
+def guarantee_ids() -> tuple[str, ...]:
+    """Sorted numerically, not lexically -- G10 follows G9, not G1."""
+    return tuple(sorted(GUARANTEES, key=lambda g: int(g[1:])))
+
+
+#: Naming an id here lets the suite finish with that guarantee unproven. It is a
+#: DECISION somebody writes down, never a default -- CI names nothing, and a
+#: guarantee that did not run and pass fails the run.
+ALLOW_ENV = "MONTHLY_BILLING_ALLOW_UNRUN"

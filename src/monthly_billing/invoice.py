@@ -1,0 +1,356 @@
+"""What a payer owes, itemised, for one garage and one period.
+
+**THE PAYER IS A SEPARATE PARTY FROM THE PARKER, FROM THE FIRST MIGRATION.** A
+company pays one invoice for many parkers, so an invoice is issued to a PAYER and
+itemises each agreement under it. Where the payer is the parker it is the same
+mechanism with one agreement, never a second path -- two paths would mean two sets
+of arithmetic and the seldom-used one would be the one that was wrong.
+
+**AN INVOICE COVERS ONE GARAGE, ONE PERIOD AND ONE CURRENCY**, and the reason is
+arithmetic rather than policy. That garage is the agreement's HOME -- the one
+that bills it -- and it stays the home when the agreement covers other garages:
+coverage may fan out, money does not, because the billing day, currency, timezone
+and grace are stated per garage with no defaults and a multi-garage agreement
+has no rule for which one governs. ``_same_garage`` is STRICT at every money
+door for that reason. The billing day is a property of the garage, so two
+garages bill on different dates and their periods are not the same period. The
+currency is a property of the garage too, and two currencies do not sum -- this
+module will not convert them, because a conversion needs a rate, a date and a
+spread, none of which any document here carries. A payer holding agreements at two
+garages therefore receives two invoices. Recorded because the specification said
+"an invoice is issued to the payer and itemises each agreement under it" without
+settling what happens when those agreements are not billed on the same day.
+
+**THE FIRST CHARGE IS TWO LINES AND IS NEVER ONE SUMMED FIGURE.** The period
+containing the start date plus the one after it, always as separate lines, so a
+customer can see which part is which.
+
+**THE LINE COUNT DOES NOT DEPEND ON THE START DATE, and that is the promise.** An
+agreement starting ON the billing day gets the whole of the first period, so its
+first line is a full month rather than a part one -- it is still its own line.
+This was written the other way round first, as "the partial period is zero days
+when the start date is the billing day", and that was simply wrong: the period
+CONTAINING the billing day starts on it, so every day of it is billable. The
+sentence was corrected rather than the arithmetic.
+
+A first line really can be zero -- an agreement whose whole first period is
+paused -- and it is emitted at zero saying so, rather than dropped. A caller that
+reads the second line for the following period gets the same answer whatever the
+start date, which is what makes this a guarantee rather than a habit.
+
+**AND A PAID PERIOD IS PAID.** A price change never touches a period already
+paid; it takes effect at the next cycle. Enforced by construction rather than by
+care: an invoice records the agreement VERSION each line was computed from, and
+recomputing a paid invoice against a newer version is refused.
+
+**THE FUNCTIONS HERE PRICE PERIODS AND NOTHING ELSE, AND WHAT THEY RETURN IS
+UNTAXED.** ``first_charge`` and ``invoice_for_period`` are the one place a
+period is priced; tax is applied afterwards, to a COMPLETE untaxed invoice, by
+``tax.tax_an_invoice`` -- the only producer of ``TAX`` lines at issue -- so the
+order on an issued invoice is period lines, fee lines, then tax lines. Neither
+function here takes a tax set, and a tax line handed to one would be a second
+place tax could come from.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import date
+from enum import Enum
+
+from .agreement import Agreement
+from .currency import validate_currency
+from .cycle import BillingPeriod, billable_days, next_period_after, period_containing, prorate
+from .findings import REFUSAL_CURRENCY_MISMATCH, REFUSAL_GARAGE_MISMATCH, Refused
+from .garage import Garage
+from .money import format_minor
+
+
+class LineKind(Enum):
+    """What a line is FOR. The kinds are separate because the invoice promises
+    they are: a partial period and a full one are never one summed figure."""
+
+    PARTIAL_PERIOD = "partial_period"
+    FULL_PERIOD = "full_period"
+    RECURRING_FEE = "recurring_fee"
+    ONE_TIME_FEE = "one_time_fee"
+    #: An owner's exception that changed an amount. Always its own line, always
+    #: with the exception's id on it, so that a figure nobody can account for
+    #: cannot appear on an invoice.
+    EXCEPTION_ADJUSTMENT = "exception_adjustment"
+    #: One tax rule's line: the engine's answer for that rule, on the invoice's
+    #: NON-TAX total. It belongs to the invoice, not to one agreement under it,
+    #: so it carries no agreement and no version; it names its rule instead. A
+    #: tax line written at issue names no exception; one written beside an
+    #: owner's adjustment names that exception -- the compensating tax it caused.
+    TAX = "tax"
+
+
+@dataclass(frozen=True)
+class InvoiceLine:
+    kind: LineKind
+    label: str
+    amount_minor: int
+    #: The agreement and version that priced the line. ``None`` on a TAX line and
+    #: on nothing else: a tax line's base is the whole invoice, and stamping one
+    #: agreement onto it would be false data on a money row.
+    agreement_id: str | None
+    agreement_version: int | None
+    period_start_day: date
+    period_end_day: date
+    #: Populated on an EXCEPTION_ADJUSTMENT line, and on a TAX line an
+    #: adjustment caused; on nothing else.
+    exception_id: str | None = None
+    #: The engine's rule id, on a TAX line and on nothing else.
+    tax_rule_id: str | None = None
+
+    def rendered(self, currency: str) -> str:
+        return f"{self.label}: {format_minor(self.amount_minor, currency)}"
+
+
+@dataclass(frozen=True)
+class Invoice:
+    payer_id: str
+    garage_id: str
+    currency: str
+    issued_for_period_start: date
+    lines: tuple[InvoiceLine, ...] = field(default_factory=tuple)
+
+    @property
+    def total_minor(self) -> int:
+        return sum(line.amount_minor for line in self.lines)
+
+    @property
+    def subtotal_minor(self) -> int:
+        """The NON-TAX total: every line that is not a TAX line. The base a tax
+        is computed on, and never a tax of a tax."""
+        return sum(line.amount_minor for line in self.lines if line.kind is not LineKind.TAX)
+
+    @property
+    def taxed(self) -> bool:
+        return any(line.kind is LineKind.TAX for line in self.lines)
+
+    def rendered(self) -> str:
+        body = "\n".join(f"  {line.rendered(self.currency)}" for line in self.lines)
+        return (
+            f"Invoice to payer {self.payer_id} for garage {self.garage_id}\n"
+            f"{body}\n"
+            f"  TOTAL: {format_minor(self.total_minor, self.currency)}"
+        )
+
+
+def _fee_lines(
+    agreement: Agreement,
+    period: BillingPeriod,
+    *,
+    prorated: bool,
+) -> list[InvoiceLine]:
+    """The additional fee lines falling in ``period``.
+
+    **A RECURRING FEE IS PRORATED EXACTLY AS THE MONTHLY PRICE IS.** It is part of
+    what the account pays every month, so a half month of it is half of it --
+    and a fee that STARTS inside the period is billed from its own start, the
+    later of its ``effective_from`` and the period's first day, never for the
+    days before it existed. A
+    ONE-TIME fee is not prorated -- it is a thing that happened once, on a day --
+    and it lands on the invoice for the period containing its effective date.
+    Neither of these was settled by the specification; both are stated here
+    because either answer is defensible and only one can be the code's.
+    """
+    lines: list[InvoiceLine] = []
+    days = billable_days(agreement, period)
+
+    for fee in agreement.recurring_fees():
+        if fee.effective_from >= period.end_day:
+            continue
+        fee_days = (
+            days
+            if fee.effective_from <= period.start_day
+            else billable_days(agreement, period, since=fee.effective_from)
+        )
+        part = prorated or fee_days != period.days
+        amount = prorate(fee.amount_minor, fee_days, period.days) if part else fee.amount_minor
+        lines.append(
+            InvoiceLine(
+                kind=LineKind.RECURRING_FEE,
+                label=f"{fee.label} ({'part month' if part else 'monthly'})",
+                amount_minor=amount,
+                agreement_id=agreement.id,
+                agreement_version=agreement.version,
+                period_start_day=period.start_day,
+                period_end_day=period.end_day,
+            )
+        )
+
+    for fee in agreement.one_time_fees():
+        if period.contains(fee.effective_from):
+            lines.append(
+                InvoiceLine(
+                    kind=LineKind.ONE_TIME_FEE,
+                    label=f"{fee.label} (one-time)",
+                    amount_minor=fee.amount_minor,
+                    agreement_id=agreement.id,
+                    agreement_version=agreement.version,
+                    period_start_day=period.start_day,
+                    period_end_day=period.end_day,
+                )
+            )
+    return lines
+
+
+def first_charge(garage: Garage, agreement: Agreement) -> Invoice:
+    """The partial period and the next full one, as separate lines.
+
+    No signup cutoff: whenever the agreement starts, it is charged for the rest
+    of that period plus the whole of the next one. Simple was the requirement,
+    and a cutoff is the thing that makes a billing system need a paragraph of
+    explanation at the till.
+    """
+    _same_garage(garage, agreement)
+
+    partial = period_containing(garage, agreement.start_day)
+    following = next_period_after(garage, partial)
+
+    partial_days = billable_days(agreement, partial)
+    partial_amount = prorate(agreement.monthly_price_minor, partial_days, partial.days)
+
+    lines: list[InvoiceLine] = [
+        InvoiceLine(
+            kind=LineKind.PARTIAL_PERIOD,
+            label=(
+                f"Part period {partial.start_day} to {partial.end_day} "
+                f"({partial_days} of {partial.days} days)"
+                if partial_days
+                else (
+                    f"Part period {partial.start_day} to {partial.end_day} "
+                    f"(0 of {partial.days} days — nothing is billable in this "
+                    "period, so this line is zero rather than absent)"
+                )
+            ),
+            amount_minor=partial_amount,
+            agreement_id=agreement.id,
+            agreement_version=agreement.version,
+            period_start_day=partial.start_day,
+            period_end_day=partial.end_day,
+        )
+    ]
+    lines.extend(_fee_lines(agreement, partial, prorated=True))
+
+    following_days = billable_days(agreement, following)
+    lines.append(
+        InvoiceLine(
+            kind=LineKind.FULL_PERIOD,
+            label=f"Period {following.start_day} to {following.end_day}",
+            amount_minor=prorate(
+                agreement.monthly_price_minor, following_days, following.days
+            ),
+            agreement_id=agreement.id,
+            agreement_version=agreement.version,
+            period_start_day=following.start_day,
+            period_end_day=following.end_day,
+        )
+    )
+    lines.extend(_fee_lines(agreement, following, prorated=following_days != following.days))
+
+    return Invoice(
+        payer_id=agreement.payer_id,
+        garage_id=garage.id,
+        currency=garage.currency,
+        issued_for_period_start=partial.start_day,
+        lines=tuple(lines),
+    )
+
+
+def first_charge_due_at(garage: Garage, agreement: Agreement):
+    """The first charge's ONE tax moment: the start instant of the first period
+    it pays for, in the garage's zone -- the same definition the billing run's
+    ``due_at`` has. The first charge covers two periods and is one payment, so
+    it is taxed once, here; a tax change landing between its two periods is
+    picked up by the next invoice and never reaches back into this one."""
+    return period_containing(garage, agreement.start_day).start_instant
+
+
+def invoice_for_period(
+    garage: Garage,
+    agreements: tuple[Agreement, ...],
+    period: BillingPeriod,
+    payer_id: str,
+) -> Invoice:
+    """One payer's invoice for one garage and one period, itemising each agreement.
+
+    Every agreement under the payer contributes its own lines, labelled with its
+    own id, so a company paying for twelve parkers can see which twelve.
+    """
+    validate_currency(garage.currency, f"garage[{garage.id}].currency")
+
+    lines: list[InvoiceLine] = []
+    for agreement in sorted(agreements, key=lambda a: a.id):
+        if agreement.payer_id != payer_id:
+            continue
+        _same_garage(garage, agreement)
+
+        days = billable_days(agreement, period)
+        if days == 0:
+            continue  # paused, cancelled or not yet started for the whole period
+        lines.append(
+            InvoiceLine(
+                kind=(
+                    LineKind.FULL_PERIOD if days == period.days else LineKind.PARTIAL_PERIOD
+                ),
+                label=(
+                    f"{agreement.id}: period {period.start_day} to {period.end_day}"
+                    + ("" if days == period.days else f" ({days} of {period.days} days)")
+                ),
+                amount_minor=prorate(agreement.monthly_price_minor, days, period.days),
+                agreement_id=agreement.id,
+                agreement_version=agreement.version,
+                period_start_day=period.start_day,
+                period_end_day=period.end_day,
+            )
+        )
+        lines.extend(_fee_lines(agreement, period, prorated=days != period.days))
+
+    return Invoice(
+        payer_id=payer_id,
+        garage_id=garage.id,
+        currency=garage.currency,
+        issued_for_period_start=period.start_day,
+        lines=tuple(lines),
+    )
+
+
+def _same_garage(garage: Garage, agreement: Agreement) -> None:
+    """The money door: the agreement's HOME, by equality, never its covered set.
+
+    An agreement that covers ``garage`` without being billed there is refused
+    here exactly as one that has nothing to do with it -- pricing it against a
+    garage it merely covers would take that garage's billing day, currency and
+    grace over the home's. See the module docstring, and ``Agreement.covers_garage``
+    for the access question this deliberately is not.
+    """
+    if agreement.garage_id != garage.id:
+        raise Refused(
+            REFUSAL_GARAGE_MISMATCH,
+            f"agreement {agreement.id!r} is billed at garage "
+            f"{agreement.garage_id!r} and was billed against {garage.id!r}"
+            + (
+                ", which it covers but is not billed at."
+                if agreement.covers_garage(garage.id)
+                else "."
+            ),
+        )
+
+
+def refuse_mixed_currency(garages: tuple[Garage, ...]) -> None:
+    """Refuse an invoice that would span two currencies, naming both.
+
+    Exposed rather than inlined because the caller assembling a payer's invoices
+    is the one that can see more than one garage, and this module refuses in one
+    voice wherever the situation arises.
+    """
+    currencies = {g.currency for g in garages}
+    if len(currencies) > 1:
+        raise Refused(
+            REFUSAL_CURRENCY_MISMATCH,
+            f"these agreements are denominated in {sorted(currencies)}.",
+        )

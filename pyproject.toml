@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openparking-monthly-billing"
+version = "0.1.0"
+description = "Open Parking AI monthly billing — what an account owes and when, and whether a vehicle is covered right now"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "AGPL-3.0-or-later"
+# Standard library only, and the engine will stay that way. Everything that
+# decides money here is arithmetic on values: an agreement, a period, a set of
+# exceptions. None of it needs a database, and an integrator embedding the
+# entitlement answer in a parking lane should not have to install one.
+#
+# Tax is the one exception, and it is an extra rather than a dependency: the
+# `tax` extra brings `rate-engine`, whose `tax.py` is the only tax arithmetic in
+# the estate. See the extra below and src/monthly_billing/tax.py.
+#
+# The Postgres store is behind a port and its driver is the `store` extra. See
+# src/monthly_billing/store/__init__.py -- it is imported lazily, inside the
+# function that needs it, so importing this package on a machine with no driver
+# is not an error.
+#
+# NOTE for anyone tempted to add a decimal or money library: money in this
+# module is a Python `int` of minor units and nothing else. See money.py.
+dependencies = []
+
+[project.optional-dependencies]
+store = ["psycopg[binary]>=3.1"]
+# The tax on a monthly invoice is `rate-engine`'s computation, in-process, and
+# nothing else's -- the same `tax.py` the barrier's tax is. It is an extra, not
+# a dependency: the entitlement answer and the period arithmetic still need
+# nothing, and src/monthly_billing/tax.py imports the engine lazily, inside the
+# function that needs it, exactly as the store imports its driver.
+#
+# Pinned to an exact commit on rate-engine's main -- the commit platform's
+# `rate-engine.pin` named when this was written. Moving it is a deliberate act
+# with its own pull request; `.github/scripts/check-rate-engine-pin.sh` fails CI
+# if the commit is not on the engine's main. `dev` carries the same pin, because
+# the tax guarantees cannot run without the engine and CI installs `.[dev]`.
+tax = [
+  "openparking-rate-engine @ git+https://github.com/openparking-ai-code/rate-engine@5d2f8a1cb444c25dc275c9f4bff27f3d48045e0a",
+]
+dev = [
+  "pytest>=8",
+  "ruff>=0.8",
+  "psycopg[binary]>=3.1",
+  "openparking-rate-engine @ git+https://github.com/openparking-ai-code/rate-engine@5d2f8a1cb444c25dc275c9f4bff27f3d48045e0a",
+]
+
+[project.scripts]
+monthly-billing = "monthly_billing.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+markers = [
+  # A test that proves one of the guarantees docs/CONTRACT.md states. CI fails
+  # when one of these skips without its reason being declared, because a
+  # guarantee whose test can quietly not run is not a guarantee.
+  #
+  # The identifier is not decoration: tests/_guarantees.py holds the canonical
+  # registry, conftest requires every registered id to have RUN, and
+  # docs/CONTRACT.md is generated from the same registry. One source, three
+  # consumers -- so a guarantee cannot be dropped from any of them silently.
+  "guarantee(id): proves a registered guarantee; may not skip silently",
+  # Needs a Postgres to talk to. This is the ONE allowance in the suite, and it
+  # is named here rather than left as a bare skipif: the guarantee it carries
+  # (G12) is about the database catalogue, and there is no way to read a
+  # catalogue without a database. CI always provides one, so CI never skips it.
+  "needs_postgres: requires MONTHLY_BILLING_TEST_DSN to point at a database",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
