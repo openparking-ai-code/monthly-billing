@@ -41,13 +41,13 @@ store = ["psycopg[binary]>=3.1"]
 # if the commit is not on the engine's main. `dev` carries the same pin, because
 # the tax guarantees cannot run without the engine and CI installs `.[dev]`.
 tax = [
-  "openparking-rate-engine @ git+https://github.com/openparking-ai-code/rate-engine@5d2f8a1cb444c25dc275c9f4bff27f3d48045e0a",
+  "openparking-rate-engine @ git+https://github.com/openparking-ai-code/rate-engine@d56c02dc3b5b54430a9da31bf5198354b1309c33",
 ]
 dev = [
   "pytest>=8",
   "ruff>=0.8",
   "psycopg[binary]>=3.1",
-  "openparking-rate-engine @ git+https://github.com/openparking-ai-code/rate-engine@5d2f8a1cb444c25dc275c9f4bff27f3d48045e0a",
+  "openparking-rate-engine @ git+https://github.com/openparking-ai-code/rate-engine@d56c02dc3b5b54430a9da31bf5198354b1309c33",
 ]
 
 [project.scripts]
