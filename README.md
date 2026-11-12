@@ -94,6 +94,13 @@ period and an identity rule are all REQUIRED of a garage, and none has a default
 a guessed billing day charges somebody on the wrong date, and a guessed identity
 rule decides whether a monthly parker is recognised at all.
 
+**Choosing the identity rule at setup:** a garage whose vehicles are recognised
+by a plate reader uses `folded_alphanumeric`, so `CAR-NEW`, `car new` and
+`CARNEW` are one car. `exact` is only for a garage whose identities are tokens
+issued at enrolment, where a space or a dash makes a different vehicle; set on
+a plate-reader garage, it would leave a monthly car unrecognised because of
+how its plate was typed.
+
 Where an agreement does not determine an answer, the module says which field is
 missing. It never invents a figure. A figure somebody pays looks the same whether
 it was determined or guessed.
